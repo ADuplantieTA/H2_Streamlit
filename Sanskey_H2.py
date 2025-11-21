@@ -192,8 +192,8 @@ h2_ci_kg_per_kg = sidebar.slider(
     "H₂ carbon intensity (kgCO₂e/kg H₂)",
     min_value=0.0,
     max_value=15.0,
-    value=0.0,
-    step=0.1,
+    value=7.715,
+    step=0.005,
 )
 
 flue_o2_pct = sidebar.slider(
@@ -636,7 +636,7 @@ methane_energy_gj = energy_demand_gj - hydrogen_energy_gj
 # Upstream CO2e for hydrogen based on sidebar intensity and energy density conversion
 kg_co2_per_gj_h2 = (h2_ci_kg_per_kg / h2_energy_density_gj_per_kg) if h2_energy_density_gj_per_kg else 0.0
 h2_upstream_co2e_tonnes = hydrogen_energy_gj * kg_co2_per_gj_h2 / 1000.0
-sidebar.caption(f"Converted intensity ≈ {kg_co2_per_gj_h2:.1f} kgCO₂e/GJ H₂")
+sidebar.caption(f"Converted intensity ≈ {kg_co2_per_gj_h2:.2f} kgCO₂e/GJ")
 
 energy_col1, energy_col2 = st.columns(2)
 with energy_col1:
