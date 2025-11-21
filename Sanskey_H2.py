@@ -24,6 +24,21 @@ st.write(
 
 DATA_FILE = Path(__file__).with_name("Value and units.xlsx")
 MIXING_FILE = Path(__file__).with_name("Mixing.xlsx")
+ENERGY_FILE = Path(__file__).with_name("energy_data.csv")
+
+MIX_COMPOSITION_COL = "Gas Mixture Composition (X% Hydrogen Blend)"
+MIX_FRACTION_COL = "Fraction of Energy from Hydrogen"
+MIX_NUMERIC_COLUMNS = [
+    MIX_COMPOSITION_COL,
+    "Energy contribution of hydrogen per 1 m³ of blended gas (X% hydrogen):",
+    "Natural Gas Energy Contribution (Remaining X%)",
+    "Total Energy Content of Gas Mixture",
+    MIX_FRACTION_COL,
+    "Energy Shortfall Compared to Pure Natural Gas",
+    "Additional Volume of Gas Mixture Required to Meet Original Energy Demand (Equivalent to 1 m³ NG)",
+    "Natural Gas Volume Required in Gas Mixture (X% Hydrogen) to Match Energy Content of 1 m³ NG",
+    "Hydrogen Volume Required in Gas Mixture (X% Hydrogen) to Match Energy Content of 1 m³ NG",
+]
 
 
 @st.cache_data
@@ -50,16 +65,60 @@ def load_mixing_data(path: Path) -> pd.DataFrame:
 
     frame = pd.read_excel(path)
     frame = frame.rename(columns=lambda col: str(col).strip())
-    numeric_columns = [
-        "Gas Mixture Composition (X% Hydrogen Blend)",
-        "Fraction of Energy from Hydrogen",
-        "Energy contribution of hydrogen per 1 m³ of blended gas (X% hydrogen):",
-        "Natural Gas Energy Contribution (Remaining X%)",
-        "Total Energy Content of Gas Mixture",
-    ]
-    for col in numeric_columns:
+    for col in MIX_NUMERIC_COLUMNS:
         if col in frame:
             frame[col] = pd.to_numeric(frame[col], errors="coerce")
+    if MIX_COMPOSITION_COL in frame:
+        frame = frame.dropna(subset=[MIX_COMPOSITION_COL], how="all")
+    frame = frame.dropna(how="all")
+    frame = frame.reset_index(drop=True)
+    return frame
+
+
+DEFAULT_ENERGY_ROWS = [
+    {"Month": "Jan", "Service Energy MWh": 18328, "Service Energy GJ": 65982, "Input GJ @80%": 82478},
+    {"Month": "Feb", "Service Energy MWh": 15063, "Service Energy GJ": 54226, "Input GJ @80%": 67782},
+    {"Month": "Mar", "Service Energy MWh": 12879, "Service Energy GJ": 46364, "Input GJ @80%": 57955},
+    {"Month": "Apr", "Service Energy MWh": 10984, "Service Energy GJ": 39542, "Input GJ @80%": 49427},
+    {"Month": "May", "Service Energy MWh": 6147, "Service Energy GJ": 22129, "Input GJ @80%": 27662},
+    {"Month": "Jun", "Service Energy MWh": 4154, "Service Energy GJ": 14954, "Input GJ @80%": 18692},
+    {"Month": "Jul", "Service Energy MWh": 2549, "Service Energy GJ": 9175, "Input GJ @80%": 11469},
+    {"Month": "Aug", "Service Energy MWh": 2290, "Service Energy GJ": 8244, "Input GJ @80%": 10305},
+    {"Month": "Sep", "Service Energy MWh": 3345, "Service Energy GJ": 12044, "Input GJ @80%": 15055},
+    {"Month": "Oct", "Service Energy MWh": 6299, "Service Energy GJ": 22675, "Input GJ @80%": 28344},
+    {"Month": "Nov", "Service Energy MWh": 15820, "Service Energy GJ": 56950, "Input GJ @80%": 71188},
+    {"Month": "Dec", "Service Energy MWh": 22207, "Service Energy GJ": 79945, "Input GJ @80%": 99932},
+]
+
+
+@st.cache_data
+def load_energy_data(path: Path) -> pd.DataFrame:
+    """Load monthly service energy data for the Sankey reference."""
+
+    default_frame = pd.DataFrame(DEFAULT_ENERGY_ROWS)
+    if not path.exists():
+        st.warning("energy_data.csv is missing; using built-in reference values.")
+        return default_frame
+
+    try:
+        frame = pd.read_csv(path)
+    except Exception as exc:  # pragma: no cover - defensive path
+        st.warning(f"Could not read {path.name}; falling back to defaults. ({exc})")
+        return default_frame
+
+    frame = frame.rename(columns=lambda col: str(col).strip())
+    required_cols = ["Month", "Service Energy MWh", "Service Energy GJ", "Input GJ @80%"]
+    missing_cols = [col for col in required_cols if col not in frame.columns]
+    if missing_cols:
+        st.warning(f"{path.name} is missing columns: {', '.join(missing_cols)}. Using defaults instead.")
+        return default_frame
+
+    frame = frame[required_cols]
+    frame["Month"] = frame["Month"].astype(str)
+    for col in required_cols[1:]:
+        frame[col] = pd.to_numeric(frame[col], errors="coerce")
+
+    frame = frame.dropna(subset=["Month"])
     frame = frame.dropna(how="all")
     return frame
 
@@ -77,22 +136,10 @@ if not MIXING_FILE.exists():
 else:
     mixing_df = load_mixing_data(MIXING_FILE)
 
-monthly_energy_data = pd.DataFrame(
-    [
-        {"Month": "Jan", "Service Energy MWh": 18328, "Service Energy GJ": 65982, "Input GJ @80%": 82478},
-        {"Month": "Feb", "Service Energy MWh": 15063, "Service Energy GJ": 54226, "Input GJ @80%": 67782},
-        {"Month": "Mar", "Service Energy MWh": 12879, "Service Energy GJ": 46364, "Input GJ @80%": 57955},
-        {"Month": "Apr", "Service Energy MWh": 10984, "Service Energy GJ": 39542, "Input GJ @80%": 49427},
-        {"Month": "May", "Service Energy MWh": 6147, "Service Energy GJ": 22129, "Input GJ @80%": 27662},
-        {"Month": "Jun", "Service Energy MWh": 4154, "Service Energy GJ": 14954, "Input GJ @80%": 18692},
-        {"Month": "Jul", "Service Energy MWh": 2549, "Service Energy GJ": 9175, "Input GJ @80%": 11469},
-        {"Month": "Aug", "Service Energy MWh": 2290, "Service Energy GJ": 8244, "Input GJ @80%": 10305},
-        {"Month": "Sep", "Service Energy MWh": 3345, "Service Energy GJ": 12044, "Input GJ @80%": 15055},
-        {"Month": "Oct", "Service Energy MWh": 6299, "Service Energy GJ": 22675, "Input GJ @80%": 28344},
-        {"Month": "Nov", "Service Energy MWh": 15820, "Service Energy GJ": 56950, "Input GJ @80%": 71188},
-        {"Month": "Dec", "Service Energy MWh": 22207, "Service Energy GJ": 79945, "Input GJ @80%": 99932},
-    ]
-)
+monthly_energy_data = load_energy_data(ENERGY_FILE)
+if monthly_energy_data.empty:
+    st.error("No monthly energy data available. Please populate energy_data.csv.")
+    st.stop()
 
 annual_totals = {
     "Month": "2027 Total",
@@ -112,8 +159,8 @@ blend_percentage = sidebar.slider(
     step=1,
 )
 
-mix_column = "Gas Mixture Composition (X% Hydrogen Blend)"
-fraction_column = "Fraction of Energy from Hydrogen"
+mix_column = MIX_COMPOSITION_COL
+fraction_column = MIX_FRACTION_COL
 
 hydrogen_energy_fraction = 0.0
 selection_row: pd.DataFrame | None = None
